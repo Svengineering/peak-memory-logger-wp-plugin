@@ -4,7 +4,7 @@
  * Plugin Name: Peak Memory Logger
  * Plugin URI: 
  * Description: logs peak memory usage for every request
- * Version: 1.0
+ * Version: 1.1
  * Requires at least: 6.7
  * Requires PHP: 8.0
  * Author: Sven Volkmann
@@ -25,32 +25,42 @@ add_action('plugins_loaded', 'PkMemLogger\start');
 
 function start() {
     
-    add_action('shutdown', 'PkMemLogger\shutdown_action');
     add_action('admin_init', 'PkMemLogger\settings_api_init');
     add_action('admin_menu', 'PkMemLogger\admin_menu_cb');
     
     //build file path for log file
     $file_or_path = get_option('pkmemlogger_log_file');
+     
     
-    //default file name
-    if(!$file_or_path) {
-    	$file_or_path = LOG_FILE_DEF;
+    if($file_or_path) {
+
+        //full file path?
+        if( $file_or_path[0] == '/') {
+            
+            $maybe_dir = dirname($file_or_path);
+
+            //writeable directory?
+            if( is_dir($maybe_dir) && is_writeable($maybe_dir) ) {
+        
+                define('PKMEMLOGGER_LOG_FILE', $file_or_path);
+            }
+
+        } elseif ( mb_strpos($file_or_path, '/') === false ) {
+        //only file name -> save in uploads
+            
+            $upload_dir_info = wp_upload_dir();
+            $upload_dir = $upload_dir_info['basedir']; //without trailing slash	
+            $log_file = $upload_dir . '/' . $file_or_path;
+            define('PKMEMLOGGER_LOG_FILE', $log_file);
+        
+        }
     }
-    
-    //full file path?
-    $maybe_dir = dirname($file_or_path);
-    if( is_dir($maybe_dir) && is_writeable($maybe_dir) ) {
-    
-    	define('PKMEMLOGGER_LOG_FILE', $file_or_path);
-    	
+
+
+    if( defined('PKMEMLOGGER_LOG_FILE') ) {
+        add_action('shutdown', 'PkMemLogger\shutdown_action');
     } else {
-    //only file name -> save in uploads
-    
-        $upload_dir_info = wp_upload_dir();
-	    $upload_dir = $upload_dir_info['basedir']; //without trailing slash	
-	    $log_file = $upload_dir . '/' . $file_or_path;
-	    define('PKMEMLOGGER_LOG_FILE', $log_file);
-	
+        add_action( 'admin_notices', 'PkMemLogger\error_message' );      
     }
     
 }
@@ -98,7 +108,16 @@ function admin_menu_cb() {
 
 }
 
+function error_message() {
+?>
+    <div class="notice notice-error is-dismissible">
+    <p><?php echo PLUGIN_NAME ?>: Ungültiger Dateiname/Dateipfad oder schreibgeschützter Dateipfad</p>
+    </div>
+<?php
+}
+
 function admin_page() {
+
     ?>
     <div class="wrap">
 
